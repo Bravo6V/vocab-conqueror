@@ -54,10 +54,52 @@ function load() {
 }
 
 function save() {
+  var json = JSON.stringify(db);
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(db));
+    localStorage.setItem(STORE_KEY, json);
   } catch (e) {
-    toast("⚠️ 保存失败：本地存储空间不足");
+    // 判断是否真的是存储空间不足
+    var name = e && (e.name || e.code || "");
+    var isQuota = name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED" || e && e.code === 22;
+    if (isQuota) {
+      // 尝试压缩：去掉已掌握单词的 history 数组
+      var saved = 0;
+      db.words.forEach(function (w) {
+        if (w.status === STATUS.MASTERED && w.history && w.history.length) {
+          w.history = [];
+          saved++;
+        }
+      });
+      try {
+        localStorage.setItem(STORE_KEY, JSON.stringify(db));
+        toast("⚠️ 存储空间紧张，已压缩 " + saved + " 个已掌握单词的记录。建议导出备份后清空部分词库。");
+        return;
+      } catch (e2) {
+        // 仍然失败 → 尝试只保留核心数据
+        var minimal = { words: [], stats: db.stats, version: db.version };
+        db.words.forEach(function (w) {
+          minimal.words.push({
+            id: w.id, word: w.word, meaning: w.meaning,
+            status: w.status, stage: w.stage,
+            nextReview: w.nextReview, lastReview: w.lastReview,
+            views: w.views, correct: w.correct, wrong: w.wrong,
+            history: []
+          });
+        });
+        try {
+          localStorage.setItem(STORE_KEY, JSON.stringify(minimal));
+          db = minimal;
+          toast("⚠️ 存储空间严重不足，已切换精简模式。请尽快导出备份！");
+          return;
+        } catch (e3) {
+          toast("❌ 存储空间已满，无法保存。请导出备份后清空部分词库！");
+        }
+      }
+    } else {
+      // 不是空间问题（可能是 Safari 隐私模式）
+      console.error("保存失败:", e);
+      toast("⚠️ 保存失败：" + (e && e.message ? e.message : "未知错误") + "（如使用隐私模式请切换为正常模式）");
+    }
   }
 }
 
