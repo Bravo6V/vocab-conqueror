@@ -172,17 +172,11 @@ function scheduleWord(item, result, durationMs) {
   item.history.push({ t: now, r: result ? 1 : 0, dur: Math.round(durationMs / 1000) });
 
   if (result) {
+    // 认识（且记对）→ 直接毕业，不再排进复习队列
     item.correct += 1;
-    item.stage += 1;
-    if (item.stage > EBINGHAUS_INTERVALS.length) {
-      // 走完全部间隔 → 掌握
-      item.status = STATUS.MASTERED;
-      item.nextReview = 0;
-    } else {
-      // 首次答对 → 5分钟后复习；之后逐级拉长间隔
-      item.status = item.stage <= 2 ? STATUS.LEARNING : STATUS.REVIEWING;
-      item.nextReview = now + EBINGHAUS_INTERVALS[item.stage - 1];
-    }
+    item.stage = EBINGHAUS_INTERVALS.length;
+    item.status = STATUS.MASTERED;
+    item.nextReview = 0;
   } else {
     // 忘了 → 重置到第一阶段
     item.wrong += 1;
