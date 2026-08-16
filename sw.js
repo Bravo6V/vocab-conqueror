@@ -1,5 +1,5 @@
 // 词海征服 Service Worker — 离线缓存
-const CACHE_NAME = "vocab-conqueror-v3";
+const CACHE_NAME = "vocab-conqueror-v4";
 const ASSETS = [
   "./",
   "./index.html",
