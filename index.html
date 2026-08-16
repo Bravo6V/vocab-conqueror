@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#E8833A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="词海征服">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>词海征服 · 背单词</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo" onclick="go('home')">
+      <span class="logo-icon">⚔️</span>
+      <span class="logo-text">词海征服</span>
+    </div>
+    <nav class="nav">
+      <button class="nav-btn active" data-page="home" onclick="go('home')">🏠 首页</button>
+      <button class="nav-btn" data-page="library" onclick="go('library')">📚 词库</button>
+      <button class="nav-btn" data-page="import" onclick="go('import')">📥 导入</button>
+    </nav>
+  </div>
+</header>
+
+<main id="app">
+
+  <!-- ============ 首页 ============ -->
+  <section id="page-home" class="page active">
+    <div class="container">
+      <div class="hero-card">
+        <h1 id="greeting">你好，征服者！</h1>
+        <p class="hero-sub" id="todaySummary">今日尚未开始征战</p>
+        <div class="hero-stats">
+          <div class="stat-pill">
+            <span class="stat-num" id="statNew">0</span>
+            <span class="stat-label">新词待学</span>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-num" id="statReview">0</span>
+            <span class="stat-label">待复习</span>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-num" id="statMastered">0</span>
+            <span class="stat-label">已掌握</span>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-big" id="btnStart" onclick="startStudy()">
+          ⚔️ 开始征战
+        </button>
+      </div>
+
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>📈 学习概况</h3>
+          <div class="overview-rows">
+            <div class="overview-row">
+              <span>词库总量</span><strong id="ovTotal">0</strong>
+            </div>
+            <div class="overview-row">
+              <span>今日已学</span><strong id="ovToday">0</strong>
+            </div>
+            <div class="overview-row">
+              <span>累计学习</span><strong id="ovLearned">0</strong>
+            </div>
+            <div class="overview-row">
+              <span>连续打卡</span><strong id="ovStreak">0 天</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>🕐 复习时间轴</h3>
+          <p class="panel-desc">按照艾宾浩斯遗忘曲线，不认识和记错的单词将按时回来找你</p>
+          <div class="timeline">
+            <div class="tl-item">5分钟</div>
+            <div class="tl-item">30分钟</div>
+            <div class="tl-item">12小时</div>
+            <div class="tl-item">1天</div>
+            <div class="tl-item">2天</div>
+            <div class="tl-item">4天</div>
+            <div class="tl-item">7天</div>
+            <div class="tl-item">15天</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>🔥 近7日学习热力</h3>
+        <div class="heatmap" id="heatmap"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 学习页 ============ -->
+  <section id="page-study" class="page">
+    <div class="study-wrap">
+      <div class="study-top">
+        <button class="btn btn-ghost btn-sm" onclick="endStudy(true)">✕ 退出</button>
+        <div class="study-progress">
+          <div class="progress-bar"><div class="progress-fill" id="studyProgress"></div></div>
+          <span id="studyCount">0 / 0</span>
+        </div>
+        <span class="study-timer" id="studyTimer">00:00</span>
+      </div>
+
+      <!-- 卡片 -->
+      <div class="card-area">
+        <!-- 阶段1：显示单词 -->
+        <div class="word-card" id="stageWord">
+          <div class="word-tag" id="wordTag">新词</div>
+          <div class="word-en" id="wordEn">apple</div>
+          <div class="word-hint">想一想它的意思…</div>
+          <div class="word-actions">
+            <button class="btn btn-warm" onclick="answer(false)">😶 不认识</button>
+            <button class="btn btn-green" onclick="answer(true)">😎 认识</button>
+          </div>
+        </div>
+
+        <!-- 阶段2：显示释义 + 确认 -->
+        <div class="word-card hidden" id="stageMeaning">
+          <div class="word-tag" id="wordTag2">新词</div>
+          <div class="word-en-sm" id="wordEn2">apple</div>
+          <div class="divider"></div>
+          <div class="word-cn" id="wordCn">n. 苹果</div>
+          <div class="word-hint">刚才记对了吗？</div>
+          <div class="word-actions">
+            <button class="btn btn-warm" onclick="confirmResult(false)">😑 记错了</button>
+            <button class="btn btn-green" onclick="confirmResult(true)">✅ 记对了</button>
+          </div>
+        </div>
+
+        <!-- 完成画面 -->
+        <div class="word-card hidden" id="stageDone">
+          <div class="done-emoji">🏆</div>
+          <h2>本轮征战结束！</h2>
+          <p class="done-sub" id="doneSummary">干得漂亮，征服者！</p>
+          <div class="word-actions">
+            <button class="btn btn-primary" onclick="go('home')">返回首页</button>
+            <button class="btn btn-ghost" onclick="startStudy()">再来一轮</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 本轮已学 -->
+      <div class="recent-words" id="recentWords"></div>
+    </div>
+  </section>
+
+  <!-- ============ 导入页 ============ -->
+  <section id="page-import" class="page">
+    <div class="container narrow">
+      <div class="panel">
+        <h3>📥 导入词书</h3>
+        <p class="panel-desc">支持 CSV 或 JSON 格式，每条记录包含英文单词和中文释义。</p>
+
+        <div class="dropzone" id="dropzone">
+          <div class="dz-icon">📄</div>
+          <p><strong>点击选择文件</strong> 或拖拽到此处</p>
+          <p class="dz-sub">支持 .csv / .json 文件</p>
+          <input type="file" id="fileInput" accept=".csv,.json" hidden>
+        </div>
+
+        <div class="format-help">
+          <details>
+            <summary>查看格式要求</summary>
+            <div class="code-block">
+              <p><strong>CSV 格式</strong>（首行可选表头）：</p>
+              <pre>word,meaning
+apple,苹果
+banana,香蕉</pre>
+              <p><strong>JSON 格式</strong>：</p>
+              <pre>[
+  {"word": "apple", "meaning": "苹果"},
+  {"word": "banana", "meaning": "香蕉"}
+]</pre>
+            </div>
+          </details>
+        </div>
+
+        <div class="import-result hidden" id="importResult"></div>
+      </div>
+
+      <div class="panel">
+        <h3>🧪 试用内置词书</h3>
+        <p class="panel-desc">还没有词书？先装载一份内置高频词试试手感。</p>
+        <div class="builtin-list" id="builtinList"></div>
+      </div>
+
+      <div class="panel">
+        <h3>💾 数据备份</h3>
+        <p class="panel-desc">导出学习进度备份文件，换设备或换网址时导入即可恢复全部数据。</p>
+        <div class="backup-actions" style="display:flex;gap:12px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="exportData()">📥 导出备份</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('backupInput').click()">📤 导入备份</button>
+          <input type="file" id="backupInput" accept=".json" hidden>
+        </div>
+        <div class="import-result hidden" id="backupResult"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 词库页 ============ -->
+  <section id="page-library" class="page">
+    <div class="container">
+      <div class="panel">
+        <div class="lib-header">
+          <h3>📚 我的词库</h3>
+          <div class="lib-tools">
+            <input type="text" class="search-input" id="libSearch" placeholder="搜索单词…" oninput="renderLibrary()">
+            <select id="libFilter" onchange="renderLibrary()">
+              <option value="all">全部状态</option>
+              <option value="new">未学习</option>
+              <option value="learning">学习中</option>
+              <option value="reviewing">复习中</option>
+              <option value="mastered">已掌握</option>
+            </select>
+            <button class="btn btn-danger btn-sm" onclick="confirmClear()">🗑 清空</button>
+          </div>
+        </div>
+        <div class="lib-list" id="libList"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- 确认对话框 -->
+<div class="modal-mask hidden" id="modalMask">
+  <div class="modal">
+    <h3 id="modalTitle">确认</h3>
+    <p id="modalText"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-danger" id="modalOk">确定</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+  // 注册 Service Worker — 首次加载后缓存全部资源，实现离线可用
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function (e) {
+        console.log("SW注册失败:", e);
+      });
+    });
+  }
+</script>
+</body>
+</html>
