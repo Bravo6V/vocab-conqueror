@@ -34,6 +34,9 @@ function defaultDB() {
       startDay: todayKey(),
       days: {},        // { "2025-01-01": {learned:0, review:0, answers:0} }
     },
+    settings: {
+      shuffle: true,   // 乱序出题（默认开启）
+    },
   };
 }
 
@@ -44,6 +47,7 @@ function load() {
       db = JSON.parse(raw);
       // 兼容性检查
       if (!db.words || !db.stats) db = defaultDB();
+      if (!db.settings) db.settings = { shuffle: true };
     } else {
       db = defaultDB();
     }
@@ -143,9 +147,13 @@ function addWord(word, meaning) {
   return true;
 }
 
-// 获取待学习的新词
+// 获取待学习的新词（乱序模式下随机抽取）
 function getNewWords(n) {
-  return db.words.filter(x => x.status === STATUS.NEW).slice(0, n);
+  const pool = db.words.filter(x => x.status === STATUS.NEW);
+  if (db.settings && db.settings.shuffle) {
+    return shuffle(pool).slice(0, n);
+  }
+  return pool.slice(0, n);
 }
 
 // 获取到期待复习的单词（按到期时间升序）
@@ -225,7 +233,9 @@ function startStudy() {
   // 复习优先，穿插新词
   study.queue = [];
   const maxDue = due.slice(0, ROUND_SIZE);
-  maxDue.forEach(x => study.queue.push({ item: x, isNew: false }));
+  // 乱序模式下，复习队列也打乱（但不改变优先级——只打乱同一批次内的顺序）
+  const orderedDue = (db.settings && db.settings.shuffle) ? shuffle(maxDue) : maxDue;
+  orderedDue.forEach(x => study.queue.push({ item: x, isNew: false }));
   fresh.forEach(x => study.queue.push({ item: x, isNew: true }));
   // 简单交错：复习2个插1个新词
   interleave();
@@ -703,6 +713,16 @@ function importData(file) {
 function $(sel) { return document.querySelector(sel); }
 function $all(sel) { return document.querySelectorAll(sel); }
 
+// Fisher-Yates 洗牌算法（不修改原数组）
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -766,6 +786,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const bi = $("#backupInput");
   if (bi) bi.addEventListener("change", function () { if (bi.files.length) { importData(bi.files[0]); bi.value = ""; } });
 
+  // 乱序开关
+  const st = $("#shuffleToggle");
+  if (st) {
+    st.checked = !!(db.settings && db.settings.shuffle);
+    updateShuffleUI();
+    st.addEventListener("change", function () {
+      if (!db.settings) db.settings = {};
+      db.settings.shuffle = st.checked;
+      save();
+      updateShuffleUI();
+      toast(st.checked ? "🔀 乱序出题已开启" : "📋 已切换为顺序出题");
+    });
+  }
+
   // 快捷键：空格显示释义方向（预留）
   document.addEventListener("keydown", (e) => {
     if ($("#page-study").classList.contains("active")) {
@@ -798,3 +832,18 @@ window.loadBuiltin = loadBuiltin;
 window.closeModal = closeModal;
 window.exportData = exportData;
 window.importData = importData;
+
+// 更新乱序开关的视觉状态
+function updateShuffleUI() {
+  const st = $("#shuffleToggle");
+  if (!st) return;
+  const thumb = st.parentElement.querySelector(".slider-thumb");
+  const track = st.parentElement.querySelector(".slider-track");
+  if (st.checked) {
+    if (thumb) thumb.style.transform = "translateX(22px)";
+    if (track) track.style.background = "var(--accent, #E8915C)";
+  } else {
+    if (thumb) thumb.style.transform = "translateX(0)";
+    if (track) track.style.background = "#ccc";
+  }
+}
