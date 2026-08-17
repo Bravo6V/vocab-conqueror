@@ -250,6 +250,11 @@ banana,香蕉</pre>
 
 </main>
 
+<!-- 页脚版本号 -->
+<footer class="app-footer" style="text-align:center;padding:18px 12px 28px;color:#b08968;font-size:12px;opacity:.75;letter-spacing:.5px">
+  <span id="appVersion"></span>
+</footer>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -267,10 +272,22 @@ banana,香蕉</pre>
 
 <script src="app.js"></script>
 <script>
-  // 注册 Service Worker — 首次加载后缓存全部资源，实现离线可用
+  // 注册 Service Worker — 联网优先拉取最新资源，兼顾离线可用与实时更新
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
-      navigator.serviceWorker.register("sw.js").catch(function (e) {
+      navigator.serviceWorker.register("sw.js").then(function (reg) {
+        // 检测到新版本就绪 → 提示并自动刷新（双保险，让 iOS PWA 更新更可靠）
+        reg.addEventListener("updatefound", function () {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener("statechange", function () {
+            if (nw.state === "installed" && navigator.serviceWorker.controller) {
+              if (typeof toast === "function") toast("🔄 发现新版本，正在刷新…");
+              setTimeout(function () { location.reload(); }, 800);
+            }
+          });
+        });
+      }).catch(function (e) {
         console.log("SW注册失败:", e);
       });
     });
