@@ -22,6 +22,20 @@ const STATUS = { NEW: "new", LEARNING: "learning", REVIEWING: "reviewing", MASTE
 const STATUS_LABEL = { new: "未学习", learning: "学习中", reviewing: "复习中", mastered: "已掌握" };
 const STORE_KEY = "vocab_conqueror_data_v1";
 const ROUND_SIZE = 15; // 每轮学习的单词数
+const APP_VERSION = "v6.3"; // 应用版本号（显示在页脚，用于确认更新是否生效）
+
+/* ============ 版本热更新：检测到新版本时自动刷新一次 ============ */
+(function () {
+  try {
+    var seen = localStorage.getItem("vc_seen_ver");
+    if (seen && seen !== APP_VERSION) {
+      localStorage.setItem("vc_seen_ver", APP_VERSION);
+      location.reload(true); // 强制从网络重新加载，应用最新资源
+      return;
+    }
+    localStorage.setItem("vc_seen_ver", APP_VERSION);
+  } catch (e) { /* 隐私模式等场景忽略 */ }
+})();
 
 /* ============ IndexedDB 存储层（大容量，根治 localStorage 配额溢出） ============ */
 const IDB_NAME = "vocab_conqueror_db";
@@ -945,6 +959,10 @@ function initUI() {
   // 问候语
   const h = new Date().getHours();
   $("#greeting").textContent = h < 6 ? "夜深了，征服者！" : h < 12 ? "早上好，征服者！" : h < 18 ? "下午好，征服者！" : "晚上好，征服者！";
+
+  // 底部版本号（让用户一眼确认是否更新到最新版）
+  const verEl = document.getElementById("appVersion");
+  if (verEl) verEl.textContent = "词海征服 " + APP_VERSION;
 }
 
 // 暴露到全局（onclick 内联调用需要）
