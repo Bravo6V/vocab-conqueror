@@ -353,6 +353,7 @@ function showCard() {
   study.current = entry.item;
   study.currentIsNew = entry.isNew;
   study.phase = "word";
+  showConfirmButtons();          // 复位释义页按钮，保证每次都是「记错/记对」初始态
   study.cardShownAt = Date.now();
 
   const st = $("#stageWord"), sm = $("#stageMeaning"), sd = $("#stageDone");
@@ -371,24 +372,64 @@ function showCard() {
 // 用户点击 认识/不认识
 function answer(known) {
   if (study.phase !== "word") return;
-  study.phase = "meaning";
   const dur = Date.now() - study.cardShownAt;
-
-  // 记录首答（不认识直接进入错题调度；认识待二次确认）
   study._firstAnswer = known;
   study._firstDur = dur;
 
+  if (!known) {
+    // 不认识 → 直接记入复习队列，展示「下一词」反馈，不再二次确认记错/记对
+    scheduleWord(study.current, false, dur);
+    showSkipFeedback();
+    return;
+  }
+
+  // 认识 → 显示释义，二次确认记对/记错
+  study.phase = "meaning";
   $("#stageWord").classList.add("hidden");
   const sm = $("#stageMeaning");
   sm.classList.remove("hidden");
-  // 重新触发动画
   sm.style.animation = "none"; void sm.offsetWidth; sm.style.animation = "";
-
   $("#wordEn2").textContent = study.current.word;
   $("#wordCn").textContent = study.current.meaning;
+  showConfirmButtons();
   const tagEl = $("#wordTag2");
   if (study.currentIsNew) { tagEl.textContent = "🆕 新词"; tagEl.className = "word-tag t-new"; }
   else { tagEl.textContent = "🔁 复习"; tagEl.className = "word-tag t-review"; }
+}
+
+// 不认识后的反馈页：显示释义 + 单一「下一词」按钮
+function showSkipFeedback() {
+  study.phase = "meaning";
+  $("#stageWord").classList.add("hidden");
+  const sm = $("#stageMeaning");
+  sm.classList.remove("hidden");
+  sm.style.animation = "none"; void sm.offsetWidth; sm.style.animation = "";
+  $("#wordEn2").textContent = study.current.word;
+  $("#wordCn").textContent = study.current.meaning;
+  $("#meaningHint").textContent = "不认识也没关系，已记入复习队列 💪";
+  const tagEl = $("#wordTag2");
+  tagEl.textContent = "🤔 不认识";
+  tagEl.className = "word-tag t-wrong";
+  // 切换到「下一词」按钮（隐藏记错/记对）
+  $("#btnWrong").classList.add("hidden");
+  $("#btnRight").classList.add("hidden");
+  $("#btnNext").classList.remove("hidden");
+}
+
+// 恢复为「记错/记对」二次确认按钮
+function showConfirmButtons() {
+  $("#meaningHint").textContent = "刚才记对了吗？";
+  $("#btnWrong").classList.remove("hidden");
+  $("#btnRight").classList.remove("hidden");
+  $("#btnNext").classList.add("hidden");
+}
+
+// 不认识路径：进入下一词
+function nextWord() {
+  if (study.phase !== "meaning") return;
+  showConfirmButtons();          // 复位按钮，供下一张卡片使用
+  study.index += 1;
+  setTimeout(showCard, 120);
 }
 
 // 二次确认：记对了 / 记错了
@@ -919,6 +960,7 @@ window.closeModal = closeModal;
 window.exportData = exportData;
 window.importData = importData;
 window.compactStorage = compactStorage;
+window.nextWord = nextWord;
 
 // 更新乱序开关的视觉状态
 function updateShuffleUI() {
