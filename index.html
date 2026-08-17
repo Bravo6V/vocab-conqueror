@@ -124,16 +124,17 @@
           </div>
         </div>
 
-        <!-- 阶段2：显示释义 + 确认 -->
+        <!-- 阶段2：显示释义 + 确认 / 或不认识反馈 -->
         <div class="word-card hidden" id="stageMeaning">
           <div class="word-tag" id="wordTag2">新词</div>
           <div class="word-en-sm" id="wordEn2">apple</div>
           <div class="divider"></div>
           <div class="word-cn" id="wordCn">n. 苹果</div>
-          <div class="word-hint">刚才记对了吗？</div>
+          <div class="word-hint" id="meaningHint">刚才记对了吗？</div>
           <div class="word-actions">
-            <button class="btn btn-warm" onclick="confirmResult(false)">😑 记错了</button>
-            <button class="btn btn-green" onclick="confirmResult(true)">✅ 记对了</button>
+            <button class="btn btn-warm" id="btnWrong" onclick="confirmResult(false)">😑 记错了</button>
+            <button class="btn btn-green" id="btnRight" onclick="confirmResult(true)">✅ 记对了</button>
+            <button class="btn btn-primary btn-block hidden" id="btnNext" onclick="nextWord()">下一词 →</button>
           </div>
         </div>
 
