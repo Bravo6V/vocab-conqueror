@@ -23,6 +23,14 @@ const STATUS_LABEL = { new: "未学习", learning: "学习中", reviewing: "复�
 const STORE_KEY = "vocab_conqueror_data_v1";
 const ROUND_SIZE = 15; // 每轮学习的单词数
 
+/* ============ IndexedDB 存储层（大容量，根治 localStorage 配额溢出） ============ */
+const IDB_NAME = "vocab_conqueror_db";
+const IDB_STORE = "kv";
+const IDB_KEY = "main";
+const HISTORY_LIMIT = 50; // 每个单词最多保留最近 50 条学习历史，防止无限膨胀撑爆存储
+const idbSupported = (typeof indexedDB !== "undefined");
+let idbPromise = null;
+
 /* ============ 数据层 ============ */
 let db = null;
 
@@ -57,7 +65,75 @@ function load() {
   }
 }
 
+/* ============ IndexedDB 封装 ============ */
+function openIDB() {
+  if (!idbSupported) return Promise.reject(new Error("no indexedDB"));
+  if (idbPromise) return idbPromise;
+  idbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const dbh = req.result;
+      if (!dbh.objectStoreNames.contains(IDB_STORE)) dbh.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return idbPromise;
+}
+function idbGet() {
+  return openIDB().then(dbh => new Promise((resolve, reject) => {
+    const tx = dbh.transaction(IDB_STORE, "readonly");
+    const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+    req.onsuccess = () => resolve(req.result ? req.result.data : null);
+    req.onerror = () => reject(req.error);
+  }));
+}
+function idbSet(obj) {
+  return openIDB().then(dbh => new Promise((resolve, reject) => {
+    const tx = dbh.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).put({ data: obj, ts: Date.now() }, IDB_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+// 异步水合：优先用 IndexedDB 中的权威数据；若 IndexedDB 为空而 localStorage 有旧数据，则迁移过去并清理 localStorage
+async function hydrateFromIDB() {
+  if (!idbSupported) return false;
+  try {
+    const data = await idbGet();
+    if (data && data.words && Array.isArray(data.words) && data.words.length) {
+      db = data;
+      if (!db.settings) db.settings = { shuffle: true };
+      if (!db.stats) db.stats = { startDay: todayKey(), days: {} };
+      return true;
+    }
+    // IndexedDB 为空：把旧 localStorage 数据迁过去，腾出 localStorage 配额
+    if (db && db.words && db.words.length) {
+      await idbSet(db);
+      try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+    }
+    return false;
+  } catch (e) {
+    console.warn("IndexedDB 读取失败，沿用 localStorage:", e);
+    return false;
+  }
+}
+
 function save() {
+  // 优先写入 IndexedDB（容量大，背多少词都不爆）；失败或环境不支持时回退 localStorage
+  if (idbSupported) {
+    idbSet(db).catch(err => {
+      console.warn("IndexedDB 保存失败，回退 localStorage:", err);
+      fallbackLocalSave();
+    });
+    return;
+  }
+  fallbackLocalSave();
+}
+
+// localStorage 回退 + 三级降级容错（旧浏览器 / 隐私模式 / 不支持 IndexedDB 的环境）
+function fallbackLocalSave() {
   var json = JSON.stringify(db);
   try {
     localStorage.setItem(STORE_KEY, json);
@@ -105,6 +181,18 @@ function save() {
       toast("⚠️ 保存失败：" + (e && e.message ? e.message : "未知错误") + "（如使用隐私模式请切换为正常模式）");
     }
   }
+}
+
+// 一键压缩：清空全部学习历史，立即释放存储（急救用）
+function compactStorage() {
+  if (!db || !db.words.length) { toast("词库是空的，无需压缩"); return; }
+  var freed = 0;
+  db.words.forEach(function (w) {
+    if (w.history && w.history.length) { freed += w.history.length; w.history = []; }
+  });
+  save();
+  toast("🧹 已清理 " + freed + " 条学习历史，存储已释放！");
+  refreshHome();
 }
 
 function todayKey(d = new Date()) {
@@ -170,6 +258,7 @@ function scheduleWord(item, result, durationMs) {
   item.views += 1;
   item.lastReview = now;
   item.history.push({ t: now, r: result ? 1 : 0, dur: Math.round(durationMs / 1000) });
+  if (item.history.length > HISTORY_LIMIT) item.history = item.history.slice(-HISTORY_LIMIT);
 
   if (result) {
     // 认识（且记对）→ 直接毕业，不再排进复习队列
@@ -766,8 +855,13 @@ function go(page) {
 
 /* ============ 初始化 ============ */
 document.addEventListener("DOMContentLoaded", () => {
-  load();
+  load();                                  // 同步兜底：localStorage 旧数据 / 默认库，保证 db 立即可用
+  hydrateFromIDB()                         // 异步：IndexedDB 有数据则覆盖为权威库；否则把旧 localStorage 迁过去
+    .catch(err => console.warn("IndexedDB 读取失败，沿用 localStorage:", err))
+    .finally(() => { initUI(); refreshHome(); });
+});
 
+function initUI() {
   // 拖拽导入
   const dz = $("#dropzone"), fi = $("#fileInput");
   dz.addEventListener("click", () => fi.click());
@@ -810,9 +904,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // 问候语
   const h = new Date().getHours();
   $("#greeting").textContent = h < 6 ? "夜深了，征服者！" : h < 12 ? "早上好，征服者！" : h < 18 ? "下午好，征服者！" : "晚上好，征服者！";
-
-  refreshHome();
-});
+}
 
 // 暴露到全局（onclick 内联调用需要）
 window.go = go;
@@ -826,6 +918,7 @@ window.loadBuiltin = loadBuiltin;
 window.closeModal = closeModal;
 window.exportData = exportData;
 window.importData = importData;
+window.compactStorage = compactStorage;
 
 // 更新乱序开关的视觉状态
 function updateShuffleUI() {
