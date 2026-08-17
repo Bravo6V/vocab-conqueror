@@ -1,5 +1,5 @@
 // 词海征服 Service Worker — 离线缓存
-const CACHE_NAME = "vocab-conqueror-v5";
+const CACHE_NAME = "vocab-conqueror-v6";
 
 // 核心资源（首次安装时预缓存，保证离线也能打开）
 const CORE_ASSETS = [
