@@ -216,6 +216,7 @@ banana,香蕉</pre>
         <div class="backup-actions" style="display:flex;gap:12px;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="exportData()">📥 导出备份</button>
           <button class="btn btn-ghost" onclick="document.getElementById('backupInput').click()">📤 导入备份</button>
+          <button class="btn btn-warm" onclick="compactStorage()">🧹 压缩存储</button>
           <input type="file" id="backupInput" accept=".json" hidden>
         </div>
         <div class="import-result hidden" id="backupResult"></div>
