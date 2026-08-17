@@ -201,6 +201,8 @@ body {
   box-shadow: var(--shadow-lift);
   padding: 40px 28px; text-align: center;
   animation: cardIn 0.35s ease;
+  display: flex; flex-direction: column;
+  min-height: 440px;
 }
 @keyframes cardIn { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
 
@@ -225,8 +227,9 @@ body {
 .word-hint { font-size: 13.5px; color: var(--text-faint); margin-bottom: 26px; }
 .divider { height: 1.5px; background: var(--border); margin: 18px 0; }
 
-.word-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.word-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: auto; }
 .word-actions .btn { min-width: 130px; padding: 14px 24px; }
+.btn-block { width: 100%; }
 
 .done-emoji { font-size: 56px; margin-bottom: 12px; }
 .word-card h2 { margin-bottom: 10px; }
