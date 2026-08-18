@@ -249,12 +249,21 @@ body {
 
 /* 本轮已学 */
 .recent-words { margin-top: 22px; }
-.recent-title { font-size: 13px; color: var(--text-faint); margin-bottom: 10px; }
+.recent-title {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  font-size: 13px; color: var(--text-faint); margin-bottom: 10px;
+}
+.recent-legend { font-weight: 500; font-size: 12px; opacity: .9; }
+.recent-legend .lg { font-style: normal; font-weight: 700; }
+.recent-legend .lg.ok { color: var(--green); }
+.recent-legend .lg.re { color: var(--warm); }
 .recent-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .recent-chip {
   padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
   background: var(--green-soft); color: var(--green);
+  display: inline-flex; align-items: center; gap: 4px;
 }
+.recent-chip .fate { font-style: normal; font-weight: 600; font-size: 11px; opacity: .85; }
 .recent-chip.wrong { background: var(--warm-soft); color: var(--warm); }
 
 /* ============ 导入页 ============ */
