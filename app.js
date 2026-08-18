@@ -1,28 +1,25 @@
 /* ============================================================
  * 词海征服 · 背单词应用
- * 艾宾浩斯遗忘曲线复习调度 + localStorage 持久化
+ * 极简两板斧：学新词 + 复习（认识即毕业，不认识/记错次日再复习）
  * ============================================================ */
 
 "use strict";
 
 /* ============ 常量 ============ */
-// 艾宾浩斯遗忘曲线复习间隔（毫秒）
-const EBINGHAUS_INTERVALS = [
-  5 * 60 * 1000,            // 5 分钟
-  30 * 60 * 1000,           // 30 分钟
-  12 * 60 * 60 * 1000,      // 12 小时
-  1 * 24 * 60 * 60 * 1000,  // 1 天
-  2 * 24 * 60 * 60 * 1000,  // 2 天
-  4 * 24 * 60 * 60 * 1000,  // 4 天
-  7 * 24 * 60 * 60 * 1000,  // 7 天
-  15 * 24 * 60 * 60 * 1000, // 15 天
-];
-
-const STATUS = { NEW: "new", LEARNING: "learning", REVIEWING: "reviewing", MASTERED: "mastered" };
-const STATUS_LABEL = { new: "未学习", learning: "学习中", reviewing: "复习中", mastered: "已掌握" };
+// 单词状态：新词 / 待复习 / 已毕业（废弃艾宾浩斯多级间隔，简化为「毕业」与「次日复习」两态）
+const STATUS = { NEW: "new", REVIEW: "review", MASTERED: "mastered" };
+const STATUS_LABEL = { new: "未学习", review: "待复习", mastered: "已掌握" };
 const STORE_KEY = "vocab_conqueror_data_v1";
 const ROUND_SIZE = 15; // 每轮学习的单词数
-const APP_VERSION = "v6.3"; // 应用版本号（显示在页脚，用于确认更新是否生效）
+const APP_VERSION = "v6.4"; // 应用版本号（显示在页脚，用于确认更新是否生效）
+
+// 复习安排在「第二天 00:00」（本地时间）——符合「记不住就明天再来」的朴素节奏
+function nextDayStart() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
 
 /* ============ 版本热更新：检测到新版本时自动刷新一次 ============ */
 (function () {
@@ -70,6 +67,7 @@ function load() {
       // 兼容性检查
       if (!db.words || !db.stats) db = defaultDB();
       if (!db.settings) db.settings = { shuffle: true };
+      migrateStatus(); // 旧版（艾宾浩斯）状态迁移
     } else {
       db = defaultDB();
     }
@@ -77,6 +75,15 @@ function load() {
     console.error("数据加载失败", e);
     db = defaultDB();
   }
+}
+
+// 把旧版多级状态机迁移到新版两板斧：learning / reviewing → review，并清除废弃的 stage 字段
+function migrateStatus() {
+  if (!db || !db.words) return;
+  db.words.forEach(function (w) {
+    if (w.status === "learning" || w.status === "reviewing") w.status = STATUS.REVIEW;
+    delete w.stage;
+  });
 }
 
 /* ============ IndexedDB 封装 ============ */
@@ -118,6 +125,7 @@ async function hydrateFromIDB() {
     const data = await idbGet();
     if (data && data.words && Array.isArray(data.words) && data.words.length) {
       db = data;
+      migrateStatus(); // 旧版状态迁移
       if (!db.settings) db.settings = { shuffle: true };
       if (!db.stats) db.stats = { startDay: todayKey(), days: {} };
       return true;
@@ -174,7 +182,7 @@ function fallbackLocalSave() {
         db.words.forEach(function (w) {
           minimal.words.push({
             id: w.id, word: w.word, meaning: w.meaning,
-            status: w.status, stage: w.stage,
+            status: w.status,
             nextReview: w.nextReview, lastReview: w.lastReview,
             views: w.views, correct: w.correct, wrong: w.wrong,
             history: []
@@ -241,7 +249,7 @@ function addWord(word, meaning) {
   }
   db.words.push({
     id: genId(), word: w, meaning: m,
-    status: STATUS.NEW, stage: 0,
+    status: STATUS.NEW,
     nextReview: 0, lastReview: 0,
     views: 0, correct: 0, wrong: 0,
     history: [],
@@ -261,12 +269,12 @@ function getNewWords(n) {
 // 获取到期待复习的单词（按到期时间升序）
 function getDueReviews(now = Date.now()) {
   return db.words
-    .filter(x => (x.status === STATUS.REVIEWING || x.status === STATUS.LEARNING) && x.nextReview > 0 && x.nextReview <= now)
+    .filter(x => x.status === STATUS.REVIEW && x.nextReview > 0 && x.nextReview <= now)
     .sort((a, b) => a.nextReview - b.nextReview);
 }
 
-// 学习/复习完成后的调度
-// result: true=记住, false=没记住/记错
+// 学习/复习完成后的调度（极简两板斧）
+// result: true=记住(认识且记对) → 毕业；false=没记住/记错 → 次日再复习
 function scheduleWord(item, result, durationMs) {
   const now = Date.now();
   item.views += 1;
@@ -275,17 +283,15 @@ function scheduleWord(item, result, durationMs) {
   if (item.history.length > HISTORY_LIMIT) item.history = item.history.slice(-HISTORY_LIMIT);
 
   if (result) {
-    // 认识（且记对）→ 直接毕业，不再排进复习队列
+    // 认识且记对 → 直接毕业，永不进复习
     item.correct += 1;
-    item.stage = EBINGHAUS_INTERVALS.length;
     item.status = STATUS.MASTERED;
     item.nextReview = 0;
   } else {
-    // 忘了 → 重置到第一阶段
+    // 不认识 / 记错 → 安排到第二天再次复习
     item.wrong += 1;
-    item.stage = 0;
-    item.status = STATUS.LEARNING;
-    item.nextReview = now + EBINGHAUS_INTERVALS[0];
+    item.status = STATUS.REVIEW;
+    item.nextReview = nextDayStart();
   }
   save();
 }
@@ -304,24 +310,29 @@ let study = {
   recent: [],       // 本轮最近结果
 };
 
-function startStudy() {
+function startStudy(mode) {
+  mode = mode || "all"; // all | new | review
   const now = Date.now();
-  const due = getDueReviews(now);
-  const need = Math.max(0, ROUND_SIZE - due.length);
-  const fresh = getNewWords(need);
+  let due = [], fresh = [];
+
+  if (mode !== "new") due = getDueReviews(now);
+  if (mode !== "review") fresh = getNewWords(ROUND_SIZE);
+
+  // 按模式裁剪数量
+  if (mode === "new") fresh = fresh.slice(0, ROUND_SIZE);
+  else if (mode === "review") due = due.slice(0, ROUND_SIZE);
+  else fresh = fresh.slice(0, Math.max(0, ROUND_SIZE - due.length)); // all：新词补足到 ROUND_SIZE
 
   if (due.length === 0 && fresh.length === 0) {
     // 没有任务
     const future = db.words
-      .filter(x => x.nextReview > now)
+      .filter(x => x.status === STATUS.REVIEW && x.nextReview > now)
       .sort((a, b) => a.nextReview - b.nextReview)[0];
     let msg = "当前没有待学习的任务！";
-    if (future) {
-      const wait = future.nextReview - now;
-      msg = `全部完成！下一批复习在 ${fmtWait(wait)} 后到来`;
-    } else if (db.words.length === 0) {
-      msg = "词库是空的，先去导入词书吧！";
-    }
+    if (mode === "review") msg = "暂时没有待复习的单词，明天再来看看吧！";
+    else if (mode === "new") msg = "新词都学完啦，去复习或导入更多词书吧！";
+    if (future && mode !== "new") msg = `下一批复习在 ${fmtWait(future.nextReview - now)} 后到来`;
+    else if (db.words.length === 0) msg = "词库是空的，先去导入词书吧！";
     toast(msg);
     if (db.words.length === 0) go("import");
     return;
@@ -330,12 +341,12 @@ function startStudy() {
   // 复习优先，穿插新词
   study.queue = [];
   const maxDue = due.slice(0, ROUND_SIZE);
-  // 乱序模式下，复习队列也打乱（但不改变优先级——只打乱同一批次内的顺序）
+  // 乱序模式下，复习队列也打乱（只打乱同一批次内的顺序）
   const orderedDue = (db.settings && db.settings.shuffle) ? shuffle(maxDue) : maxDue;
   orderedDue.forEach(x => study.queue.push({ item: x, isNew: false }));
   fresh.forEach(x => study.queue.push({ item: x, isNew: true }));
-  // 简单交错：复习2个插1个新词
-  interleave();
+  // 简单交错：复习2个插1个新词（仅 all 模式需要穿插）
+  if (mode === "all") interleave();
 
   study.index = 0;
   study.phase = "word";
@@ -374,8 +385,7 @@ function showCard() {
   st.classList.remove("hidden"); sm.classList.add("hidden"); sd.classList.add("hidden");
 
   $("#wordEn").textContent = study.current.word;
-  const tag = entry.isNew ? "🆕 新词"
-    : (study.current.status === STATUS.REVIEWING ? "🔁 复习 · 第" + (study.current.stage + 1) + "轮" : "🔁 短期复习");
+  const tag = entry.isNew ? "🆕 新词" : "🔁 复习";
   const tagEl = $("#wordTag");
   tagEl.textContent = tag;
   tagEl.className = "word-tag " + (entry.isNew ? "t-new" : (study.current.wrong > 0 ? "t-wrong" : "t-review"));
@@ -420,7 +430,7 @@ function showSkipFeedback() {
   sm.style.animation = "none"; void sm.offsetWidth; sm.style.animation = "";
   $("#wordEn2").textContent = study.current.word;
   $("#wordCn").textContent = study.current.meaning;
-  $("#meaningHint").textContent = "不认识也没关系，已记入复习队列 💪";
+  $("#meaningHint").textContent = "不认识也没关系，已记入明天复习 💪";
   const tagEl = $("#wordTag2");
   tagEl.textContent = "🤔 不认识";
   tagEl.className = "word-tag t-wrong";
@@ -647,10 +657,11 @@ function renderLibrary() {
   const shown = list.slice(0, 500);
   el.innerHTML = shown.map(x => {
     let next = "";
-    if (x.nextReview > 0) {
-      if (x.nextReview <= now) next = "⏰ 已到期";
-      else next = "⏳ " + fmtWait(x.nextReview - now);
-    } else if (x.status === STATUS.MASTERED) next = "🏆";
+    if (x.status === STATUS.MASTERED) next = "🏆 已毕业";
+    else if (x.nextReview > 0) {
+      if (x.nextReview <= now) next = "⏰ 待复习";
+      else next = "📅 明天复习";
+    }
     return `<div class="lib-item">
       <span class="lib-word">${escapeHtml(x.word)}</span>
       <span class="lib-meaning">${escapeHtml(x.meaning)}</span>
