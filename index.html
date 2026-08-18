@@ -55,6 +55,10 @@
         <button class="btn btn-primary btn-big" id="btnStart" onclick="startStudy()">
           ⚔️ 开始征战
         </button>
+        <div class="study-entry">
+          <button class="btn btn-ghost btn-sm" onclick="startStudy('new')">📕 只学新词</button>
+          <button class="btn btn-ghost btn-sm" onclick="startStudy('review')">🔁 只复习</button>
+        </div>
       </div>
 
       <div class="panel-grid">
@@ -77,18 +81,9 @@
         </div>
 
         <div class="panel">
-          <h3>🕐 复习时间轴</h3>
-          <p class="panel-desc">按照艾宾浩斯遗忘曲线，不认识和记错的单词将按时回来找你</p>
-          <div class="timeline">
-            <div class="tl-item">5分钟</div>
-            <div class="tl-item">30分钟</div>
-            <div class="tl-item">12小时</div>
-            <div class="tl-item">1天</div>
-            <div class="tl-item">2天</div>
-            <div class="tl-item">4天</div>
-            <div class="tl-item">7天</div>
-            <div class="tl-item">15天</div>
-          </div>
+          <h3>🕐 复习规则</h3>
+          <p class="panel-desc">认识（且记对）的单词直接毕业，不再出现；不认识或记错的单词，会在<strong>第二天</strong>再次回来找你复习。</p>
+          <div class="rule-tip">⚔️ 两板斧：<strong>学新词</strong> &nbsp;+&nbsp; <strong>复习</strong></div>
         </div>
       </div>
 
@@ -236,8 +231,7 @@ banana,香蕉</pre>
             <select id="libFilter" onchange="renderLibrary()">
               <option value="all">全部状态</option>
               <option value="new">未学习</option>
-              <option value="learning">学习中</option>
-              <option value="reviewing">复习中</option>
+              <option value="review">待复习</option>
               <option value="mastered">已掌握</option>
             </select>
             <button class="btn btn-danger btn-sm" onclick="confirmClear()">🗑 清空</button>
