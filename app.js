@@ -11,7 +11,7 @@ const STATUS = { NEW: "new", REVIEW: "review", MASTERED: "mastered" };
 const STATUS_LABEL = { new: "未学习", review: "待复习", mastered: "已掌握" };
 const STORE_KEY = "vocab_conqueror_data_v1";
 const ROUND_SIZE = 15; // 每轮学习的单词数
-const APP_VERSION = "v6.4"; // 应用版本号（显示在页脚，用于确认更新是否生效）
+const APP_VERSION = "v6.5"; // 应用版本号（显示在页脚，用于确认更新是否生效）
 
 // 复习安排在「第二天 00:00」（本地时间）——符合「记不住就明天再来」的朴素节奏
 function nextDayStart() {
@@ -401,8 +401,9 @@ function answer(known) {
   study._firstDur = dur;
 
   if (!known) {
-    // 不认识 → 直接记入复习队列，展示「下一词」反馈，不再二次确认记错/记对
+    // 不认识 → 直接记入明天复习队列，展示「下一词」反馈，不再二次确认记错/记对
     scheduleWord(study.current, false, dur);
+    pushRecent(study.current.word, "review");
     showSkipFeedback();
     return;
   }
@@ -481,10 +482,7 @@ function confirmResult(correct) {
   if (!finalResult) study.roundStats.wrong += 1;
 
   scheduleWord(item, finalResult, totalDur);
-
-  study.recent.unshift({ word: item.word, ok: finalResult });
-  study.recent = study.recent.slice(0, 12);
-  renderRecent();
+  pushRecent(item.word, finalResult ? "mastered" : "review");
 
   study.index += 1;
   setTimeout(showCard, 120);
@@ -529,11 +527,24 @@ function updateStudyProgress() {
   $("#studyProgress").style.width = total ? ((done / total) * 100) + "%" : "0%";
 }
 
+// 记录本轮某词的去向（毕业 / 明天复习），并刷新底部清单
+function pushRecent(word, fate) {
+  study.recent.unshift({ word: word, fate: fate });
+  study.recent = study.recent.slice(0, 12);
+  renderRecent();
+}
+
 function renderRecent() {
   const el = $("#recentWords");
   if (!study.recent.length) { el.innerHTML = ""; return; }
-  el.innerHTML = `<div class="recent-title">本轮已学</div><div class="recent-list">` +
-    study.recent.map(r => `<span class="recent-chip ${r.ok ? "" : "wrong"}">${escapeHtml(r.word)}</span>`).join("") +
+  el.innerHTML =
+    `<div class="recent-title">本轮去向` +
+    `<span class="recent-legend"><i class="lg ok">✓</i>毕业&nbsp;<i class="lg re">↻</i>明天复习</span></div>` +
+    `<div class="recent-list">` +
+    study.recent.map(r => {
+      if (r.fate === "mastered") return `<span class="recent-chip ok">${escapeHtml(r.word)}<i class="fate">✓毕业</i></span>`;
+      return `<span class="recent-chip wrong">${escapeHtml(r.word)}<i class="fate">↻复习</i></span>`;
+    }).join("") +
     `</div>`;
 }
 
@@ -687,17 +698,21 @@ function refreshHome() {
   const now = Date.now();
   const due = getDueReviews(now);
   const newCount = db.words.filter(x => x.status === STATUS.NEW).length;
+  const reviewTotal = db.words.filter(x => x.status === STATUS.REVIEW).length; // 待复习总数（含明天才到期的）
   const mastered = db.words.filter(x => x.status === STATUS.MASTERED).length;
   const learned = db.words.filter(x => x.status !== STATUS.NEW).length;
 
   $("#statNew").textContent = newCount;
-  $("#statReview").textContent = due.length;
+  $("#statReview").textContent = reviewTotal;
   $("#statMastered").textContent = mastered;
 
   const ds = db.stats.days[todayKey()] || { learned: 0, review: 0 };
-  $("#todaySummary").textContent = due.length || newCount
-    ? `今日已学 ${ds.learned} 词、复习 ${ds.review} 词，还有 ${due.length + Math.min(newCount, ROUND_SIZE - due.length)} 个任务等你征服`
-    : "今日任务已全部完成，好好休息！";
+  let sub;
+  if (due.length > 0) sub = `有 ${due.length} 个词今天到期要复习，还有 ${newCount} 个新词待学`;
+  else if (reviewTotal > 0) sub = `已安排 ${reviewTotal} 个词明天复习 ↻，先学新词吧`;
+  else if (newCount > 0) sub = `今日已学 ${ds.learned} 词、复习 ${ds.review} 词，还有 ${newCount} 个新词待学`;
+  else sub = "今日任务已全部完成，好好休息！";
+  $("#todaySummary").textContent = sub;
 
   $("#ovTotal").textContent = db.words.length;
   $("#ovToday").textContent = ds.learned + ds.review;
